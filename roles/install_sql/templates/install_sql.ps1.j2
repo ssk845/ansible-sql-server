@@ -1,0 +1,53 @@
+param (
+    [Parameter(Mandatory=$true)]
+    [string]$ConfigPath,
+
+    [Parameter(Mandatory=$true)]
+    [string]$SetupPath  # e.g. C:\Temp\SQLServer2022-x64-ENU
+)
+
+$logPath = "C:\temp\install-sql-log.txt"
+$setupExe = Join-Path -Path $SetupPath -ChildPath "setup.exe"
+
+# Enable verbose output
+$VerbosePreference = "Continue"
+
+Start-Transcript -Path $logPath -Append
+
+try {
+    $instanceInstalled = Get-Service -Name 'MSSQLSERVER' -ErrorAction SilentlyContinue
+
+    if ($instanceInstalled) {
+        Write-Output "SQL Server instance 'MSSQLSERVER' is already installed. Skipping installation."
+    } else {
+        if (-Not (Test-Path $setupExe)) {
+            Write-Error "setup.exe not found at path: $setupExe"
+            Stop-Transcript
+            exit 1
+        }
+
+        $arguments = "/ConfigurationFile=`"$ConfigPath`" /Q /IACCEPTSQLSERVERLICENSETERMS"
+        Write-Output "Starting SQL Server installation..."
+        Write-Output "Running command: $setupExe $arguments"
+
+        $process = Start-Process -FilePath $setupExe `
+                                 -ArgumentList $arguments `
+                                 -Wait `
+                                 -NoNewWindow `
+                                 -PassThru
+
+        Write-Output "SQL Server installation completed with exit code: $($process.ExitCode)"
+
+        if ($process.ExitCode -ne 0) {
+            Write-Error "SQL Server setup failed with exit code $($process.ExitCode)"
+            Stop-Transcript
+            exit $process.ExitCode
+        }
+    }
+} catch {
+    Write-Error "Exception during SQL Server installation: $_"
+    Stop-Transcript
+    exit 1
+}
+
+Stop-Transcript

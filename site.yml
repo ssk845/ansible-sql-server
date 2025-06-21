@@ -1,0 +1,26 @@
+---
+- name: Install and configure SQL Server Setup
+  hosts: windows_sql
+  gather_facts: false
+
+  vars_prompt:
+    - name: win_username
+      prompt: "Enter Windows username (use DOMAIN\\user or local user)"
+      private: no
+
+    - name: win_password
+      prompt: "Enter Windows password"
+      private: yes
+
+  vars:
+    ansible_user: "{{ win_username }}"
+    ansible_password: "{{ win_password }}"
+
+  roles:
+    - role: preinstall_sql
+      tags: ['preinstallsql']
+    - role: install_sql
+      tags: ['installsql']
+    - role: postinstall_sql
+      tags: ['postinstallsql']
+

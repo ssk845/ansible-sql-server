@@ -1,0 +1,2 @@
+sql_config_file: "C:\\temp\\config.ini"
+ps_script_path: "C:\\temp\\install_sql.ps1"

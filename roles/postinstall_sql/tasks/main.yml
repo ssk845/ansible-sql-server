@@ -1,0 +1,128 @@
+- name: Enable SQL Server Agent service
+  win_service:
+    name: SQLSERVERAGENT
+    start_mode: auto
+    state: started
+  tags:
+    - postinstallsql
+    - enable_sql_agent
+
+- name: Copy TCP/IP enable script to Windows host
+  win_copy:
+    src: files/ps/enable_sql_tcp.ps1
+    dest: C:\Temp\enable_sql_tcp.ps1
+
+- name: Enable SQL Server TCP/IP
+  win_shell: powershell.exe -ExecutionPolicy Bypass -File C:\Temp\enable_sql_tcp.ps1
+
+- name: Stop SQL Server Agent
+  win_service:
+    name: SQLSERVERAGENT
+    state: stopped
+
+- name: Start SQL Server Agent
+  win_service:
+    name: SQLSERVERAGENT
+    state: started
+
+- name: Copy PowerShell script to remote Windows host
+  win_copy:
+    src: files/ps/create_admin_db.ps1
+    dest: C:\Temp\create_admin_db.ps1
+  tags:
+    - postinstallsql
+    - copy_admindb_script
+
+- name: Run the PowerShell script to create IKOAdmin and install toolkit
+  win_shell: powershell.exe -ExecutionPolicy Bypass -File "C:\Temp\create_admin_db.ps1" -SqlInstance "localhost"
+  tags:
+    - postinstallsql
+    - create_admin_db
+
+- name: Copy configured DB Mail PowerShell script to target
+  template:
+    src: files/ps/configure_dbmail.ps1.j2
+    dest: C:\Temp\configure_dbmail.ps1
+  tags:
+    - postinstallsql
+    - configure_dbmail
+
+- name: Run DB Mail configuration script
+  win_shell: powershell.exe -ExecutionPolicy Bypass -File C:\Temp\configure_dbmail.ps1
+  tags:
+    - postinstallsql
+    - configure_dbmail
+
+- name: Enable Database Mail XPs on SQL Server
+  win_shell: |
+    Invoke-Sqlcmd -ServerInstance "localhost" -Query "
+    EXEC sp_configure 'show advanced options', 1;
+    RECONFIGURE;
+    EXEC sp_configure 'Database Mail XPs', 1;
+    RECONFIGURE;"
+  args:
+    executable: powershell
+  tags:
+    - postinstallsql
+    - enable_dbmail
+
+- name: Copy SQL scripts to the Windows host
+  win_copy:
+    src: "files/sql/{{ item }}"
+    dest: "C:\\temp\\{{ item }}"
+  loop:
+    - command_log.sql
+    - dboper.sql
+    - alerts.sql
+    - db_clean_logs.sql
+    - index_optimize.sql
+  tags:
+    - postinstallsql
+    - configure_sql_scripts
+
+- name: Run Config SQL scripts
+  win_shell: |
+    Import-Module dbatools
+    Set-DbatoolsInsecureConnection -SessionOnly
+
+    $files = @(
+      "C:\\temp\\dboper.sql",
+      "C:\\temp\\alerts.sql",
+      "C:\\temp\\db_clean_logs.sql"
+      "C:\\temp\\index_optimize.sql"
+      "C:\\temp\\command_log.sql"
+    )
+
+    foreach ($file in $files) {
+      Write-Output "Executing $file"
+      try {
+        Invoke-DbaQuery -SqlInstance "localhost" -File $file -Database "msdb" -Verbose -ErrorAction Stop
+        Write-Output "Successfully executed: $file"
+      } catch {
+        Write-Error "Failed to execute $file - $($_.Exception.Message)"
+        exit 1
+      }
+    }
+  args:
+    executable: powershell
+  register: sql_script_result
+  failed_when: sql_script_result.rc != 0
+  tags:
+    - postinstallsql
+    - configure_sql_scripts
+
+- name: Clean up SQL and PS scripts from C:\Temp
+  win_file:
+    path: "C:\\Temp\\{{ item }}"
+    state: absent
+  loop:
+    - command_log.sql
+    - dboper.sql
+    - alerts.sql
+    - db_clean_logs.sql
+    - index_optimize.sql
+    - configure_dbmail.ps1
+    - enable_sql_tcp.ps1
+  tags:
+    - postinstallsql
+    - cleanup_post_scripts

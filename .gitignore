@@ -1,0 +1,30 @@
+# Ignore inventory, secrets and config
+*.env
+*.secret
+*.pem
+*.key
+*.pfx
+*.cer
+*.crt
+*.token
+*.yml.vault
+secrets.yml
+vault_pass.txt
+hosts.ini
+group_vars/
+host_vars/
+
+# Allow example versions to stay in the repo
+!group_vars_example/
+!hosts_example.ini
+
+# Ignore Ansible output or temp files
+*.retry
+*.log
+
+# Ignore OS/IDE temp files
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

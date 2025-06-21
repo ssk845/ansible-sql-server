@@ -1,0 +1,8 @@
+# This is an example file to show how to use group_vars.
+
+folders_to_create:
+  - path: 'C:\\ExampleDBData'
+  - path: 'C:\\ExampleDBBackup'
+  - path: 'C:\\ExampleDBLog'
+  - path: 'C:\\ExampleTempDB'
+  - path: 'C:\\ExampleJobLogs'

@@ -1,0 +1,7 @@
+---
+sql_instance: MSSQLSERVER
+username: "{{ sql_machine_hostname }}\\{{ win_username }}"
+password: "{{ win_password }}"
+sql_config_file: "{{ sql_config_file }}"
+sql_setup_path: "{{ sql_setup_path }}"
+ps_script_path: "{{ ps_script_path }}"

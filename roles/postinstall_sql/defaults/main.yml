@@ -1,0 +1,10 @@
+---
+sql_instance_name: MSSQLSERVER
+sql_tcp_port: 1433
+sql_server_name: "{{ sql_server_name }}"
+sql_mail_account_name: "DefaultMailAccount"
+sql_mail_display_name: "SQL Server Mail"
+sql_mail_email: "sqlserver@example.com"
+sql_mail_reply_to: "noreply@example.com"
+sql_mail_profile_name: "DefaultMailProfile"
+sql_mail_smtp_server: "relay.example.com"

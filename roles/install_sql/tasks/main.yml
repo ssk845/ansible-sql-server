@@ -1,0 +1,107 @@
+---
+- name: Ensure C:\temp exists on the Windows target
+  ansible.windows.win_file:
+    path: C:\temp
+    state: directory
+  tags:
+    - installsql
+    - ensure_temp
+    
+- name: Copy all PowerShell scripts to remote Windows host
+  win_copy:
+    src: files/ps/
+    dest: C:\Temp\
+    recurse: yes
+  tags:
+    - installsql
+    - copy_ps_scripts
+
+- name: Mount SQL Server ISO and get drive letter
+  win_shell: |
+    powershell.exe -ExecutionPolicy Bypass -File C:\Temp\set_drive.ps1
+  register: iso_mount_output
+  changed_when: false
+  tags:
+    - installsql
+    - run_mount_script
+
+- name: Set SQL setup path from mounted drive
+  set_fact:
+    sql_setup_path: "{{ iso_mount_output.stdout_lines[-1] }}:\\"
+  tags:
+    - installsql
+    - run_mount_script
+
+- name: Generate strong SA password
+  set_fact:
+        sa_password: "{{ lookup('password', '/dev/null length=16 chars=ascii_letters,digits,special') }}"
+  tags:
+    - installsql
+    - generate_sa_pass
+  
+- name: Render config.ini with SA password
+  ansible.windows.win_template:
+    src: templates/config.ini.j2
+    dest: "C:\\temp\\config.ini"
+  tags:
+    - installsql
+    - render_ini
+
+- name: Generate PowerShell script from template
+  win_template:
+    src: install_sql.ps1.j2
+    dest: C:\temp\install_sql.ps1
+  tags:
+    - installsql
+    - copy_template_file
+
+- name: Run SQL Server installation script
+  win_shell: >
+    powershell.exe -ExecutionPolicy Bypass -File C:\temp\install_sql.ps1
+    -ConfigPath "{{ sql_config_file }}"
+    -SetupPath "{{ sql_setup_path }}"
+  become: yes
+  become_method: runas
+  become_user: Administrator 
+  tags:
+    - installsql
+    - execute_install_script
+
+- name: Check if SQL install log exists
+  win_stat:
+    path: C:\temp\install-sql-log.txt
+  register: sql_log_stat
+  tags:
+    - installsql
+    - check_sql_log
+
+- name: Fetch SQL install log
+  fetch:
+    src: C:\temp\install-sql-log.txt
+    dest: ./logs/
+    flat: yes
+  when: sql_log_stat.stat.exists
+  tags:
+    - installsql
+    - get_sql_log
+
+- name: Run unmount ISO PowerShell script
+  win_shell: >
+    powershell.exe -ExecutionPolicy Bypass -File C:\temp\umount_drive.ps1
+  tags:
+    - installsql
+    - unmount_iso
+
+    
+- name: Clean up temporary config and sensitive files
+  ansible.windows.win_file:
+    path: "{{ item }}"
+    state: absent
+  with_items:
+    - "C:\\temp\\sa_password.txt"   
+    - "C:\\temp\\install_sql.ps1" 
+    - "C:\\temp\\config.ini"
+    - "C:\\temp\\set_drive.ps1"
+  tags:
+    - installsql
+    - clean_config_sensitive

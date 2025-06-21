@@ -1,0 +1,113 @@
+- name: Enable WinRM (HTTP) on Windows host
+  win_shell: |
+    winrm quickconfig -force
+    winrm set winrm/config/winrs '@{MaxMemoryPerShellMB="512"}'
+    winrm set winrm/config '@{MaxTimeoutms="1800000"}'
+    winrm set winrm/config/service '@{AllowUnencrypted="true"}'
+    winrm set winrm/config/service/auth '@{Basic="true"}'
+  register: winrm_output
+
+- name: Display WinRM output
+  debug:
+    var: winrm_output.stdout_lines
+
+- name: Open firewall port for WinRM
+  win_firewall_rule:
+    name: "Allow WinRM"
+    localport: 5985
+    action: allow
+    direction: in
+    protocol: TCP
+    state: present
+  tags:
+    - preinstallsql
+    - ensure_wimrm_http
+
+# Optional: Configure HTTPS listener
+- name: Create HTTPS WinRM listener (if not present)
+  win_command: |
+    winrm create winrm/config/Listener?Address=*+Transport=HTTPS @{Hostname="{{ ansible_hostname }}"; CertificateThumbprint="{{ winrm_cert_thumbprint }}"}
+  when: winrm_cert_thumbprint is defined
+
+- name: Ensure C:\temp exists on the Windows target
+  ansible.windows.win_file:
+    path: C:\temp
+    state: directory
+  tags:
+    - preinstallsql
+    - ensure_wimrm_https
+
+- name: Create OS folders for SQL Server setup
+  ansible.windows.win_file:
+    path: "{{ item.path }}"
+    state: directory
+  loop: "{{ folders_to_create }}"
+  register: folder_creation
+  tags:
+    - preinstallsql
+    - create_os_sql_folders
+
+- name: Show folder creation results
+  debug:
+    var: folder_creation
+  tags:
+    - preinstallsql
+    - validate_os_sql_folders
+
+- name: Check if SSMS executable exists
+  win_stat:
+    path: 'C:\Program Files (x86)\Microsoft SQL Server Management Studio 19\Common7\IDE\Ssms.exe'
+  register: ssms_path
+    
+- name: Ensure SSMS installer is downloaded
+  win_get_url:
+    url: https://go.microsoft.com/fwlink/?linkid=2313753&clcid=0x409
+    dest: C:\temp\SSMS-Setup-EU.exe
+    checksum: '7e0d3b7d7e7d51e3a4c3f7270abc036281614215'
+  when: not ssms_path.stat.exists
+  tags:
+    - preinstallsql
+    - download_ssms
+
+- name: Install SSMS if not installed
+  win_shell: |
+    Start-Process -FilePath "C:\temp\SSMS-Setup-EU.exe" -ArgumentList "/install", "/quiet", "/norestart" -Wait
+  when: not ssms_path.stat.exists
+  tags:
+    - preinstallsql
+    - download_ssms
+
+- name: Download SQL Server ISO from Azure Blob to remote Windows host
+  win_get_url:
+    url: "{{ lookup('env', 'AZURE_SQL_ISO_URL') }}"
+    validate_certs: yes
+  tags:
+    - preinstallsql
+    - copy_sql_iso
+
+- name: Check if DBATools is already installed
+  ansible.windows.win_shell: |
+    if (Get-Module -ListAvailable -Name dbatools) {
+      Write-Output "Installed"
+    } else {
+      Write-Output "NotInstalled"
+    }
+  args:
+    executable: powershell.exe
+  register: dbatools_check
+  tags:
+    - preinstallsql
+    - install_dba_tools
+
+- name: Install PowerShell module DBATools
+  ansible.windows.win_shell: |
+    Install-PackageProvider -Name NuGet -MinimumVersion 2.8.5.201 -Force
+    Set-PSRepository -Name PSGallery -InstallationPolicy Trusted
+    Install-Module -Name dbatools -Force
+  args:
+    executable: powershell.exe
+  when: "'NotInstalled' in dbatools_check.stdout"
+  tags:
+    - preinstallsql
+    - install_dba_tools
+

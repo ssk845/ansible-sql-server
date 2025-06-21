@@ -1,0 +1,34 @@
+Import-Module dbatools
+Set-DbatoolsInsecureConnection -SessionOnly
+
+$instance = "localhost"
+$mailAccountName = "{{ sql_mail_account_name }}"
+$mailDisplayName = "{{ sql_mail_display_name }}"
+$mailEmail = "{{ sql_mail_email }}"
+$mailReplyTo = "{{ sql_mail_reply_to }}"
+$mailSmtpServer = "{{ sql_mail_smtp_server }}"
+$mailProfileName = "{{ sql_mail_profile_name }}"
+
+# Check for existing mail account
+if (-not (Get-DbaDbMailAccount -SqlInstance $instance | Where-Object Name -eq $mailAccountName)) {
+    Write-Output "Creating DB Mail account $mailAccountName"
+    New-DbaDbMailAccount -SqlInstance $instance `
+        -Account $mailAccountName `
+        -DisplayName $mailDisplayName `
+        -EmailAddress $mailEmail `
+        -ReplyToAddress $mailReplyTo `
+        -MailServer $mailSmtpServer `
+        -Force
+} else {
+    Write-Output "DB Mail account '$mailAccountName' already exists."
+}
+
+# Check for existing mail profile
+if (-not (Get-DbaDbMailProfile -SqlInstance $instance | Where-Object Name -eq $mailProfileName)) {
+    Write-Output "Creating DB Mail profile $mailProfileName"
+    New-DbaDbMailProfile -SqlInstance $instance `
+        -Name $mailProfileName `
+        -MailAccountName $mailAccountName
+} else {
+    Write-Output "DB Mail profile '$mailProfileName' already exists."
+}
