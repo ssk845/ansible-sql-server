@@ -80,6 +80,7 @@
 - name: Download SQL Server ISO from Azure Blob to remote Windows host
   win_get_url:
     url: "{{ lookup('env', 'AZURE_SQL_ISO_URL') }}"
+    dest: "C:\\temp\\SQLServer.iso"
     validate_certs: yes
   tags:
     - preinstallsql
